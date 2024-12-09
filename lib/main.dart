@@ -309,14 +309,17 @@ class SplashScreenState extends State<SplashScreen> {
     );
   }
 }*/
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
-import 'regular_homepage.dart';
-import 'ikinci_sayfa.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // dotenv'i import edin
+import 'package:http/http.dart' as http; // http paketini import edin
+import 'dart:convert';
 
-void main() {
+void main() async {
+  // Uygulama başlamadan önce .env dosyasını yükle
+  await dotenv.load(fileName: ".env");
+
   runApp(const MyApp());
 }
 
@@ -345,11 +348,18 @@ class SplashScreen extends StatefulWidget {
 
 class SplashScreenState extends State<SplashScreen> {
   late VideoPlayerController _controller;
+  String _aiResponse = '';
 
   @override
   void initState() {
     super.initState();
-    _initializeVideo();
+
+    // .env dosyasındaki API Anahtarını test etmek için yazdırın
+    final apiKey = dotenv.env['OPENAI_API_KEY'] ?? 'Anahtar Yok';
+    debugPrint('API Key: $apiKey');
+
+    _initializeVideo(); // Video oynatıcıyı başlat
+    _checkLoginStatus(); // Oturum durumunu kontrol et
   }
 
   void _initializeVideo() {
@@ -375,7 +385,8 @@ class SplashScreenState extends State<SplashScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => RegularHomePage(name: prefs.getString('userName') ?? 'Kullanıcı'),
+          builder: (context) =>
+              RegularHomePage(name: prefs.getString('userName') ?? 'Kullanıcı'),
         ),
       );
     } else {
@@ -384,6 +395,44 @@ class SplashScreenState extends State<SplashScreen> {
         context,
         MaterialPageRoute(builder: (context) => const SecondPage()),
       );
+    }
+  }
+
+  // OpenAI API'ye HTTP POST isteği
+  Future<void> _sendAIRequest(String prompt) async {
+    final apiKey = dotenv.env['OPENAI_API_KEY'];
+    final url = Uri.parse('https://api.openai.com/v1/completions');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          "model": "text-davinci-003",
+          "prompt": prompt,
+          "max_tokens": 50,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _aiResponse = data['choices'][0]['text'];
+        });
+      } else {
+        debugPrint('API Hatası: ${response.statusCode} - ${response.body}');
+        setState(() {
+          _aiResponse = 'Hata: API isteği başarısız.';
+        });
+      }
+    } catch (e) {
+      debugPrint('Bir hata oluştu: $e');
+      setState(() {
+        _aiResponse = 'Hata: $e';
+      });
     }
   }
 
@@ -407,11 +456,28 @@ class SplashScreenState extends State<SplashScreen> {
                   )
                 : const CircularProgressIndicator(),
           ),
-          // Tıklama Katmanı
-          GestureDetector(
-            onTap: _checkLoginStatus, // Tıklandığında sayfa kontrolü
-            child: Container(
-              color: Colors.transparent, // Görünmez bir tıklama katmanı
+          // Kullanıcı Arayüzü
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Bir metin girin',
+                      border: OutlineInputBorder(),
+                    ),
+                    onSubmitted: (value) => _sendAIRequest(value),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _aiResponse.isNotEmpty ? 'AI Yanıtı: $_aiResponse' : '',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -420,7 +486,31 @@ class SplashScreenState extends State<SplashScreen> {
   }
 }
 
+// Placeholder widgetlar (Düzenlenebilir)
+class RegularHomePage extends StatelessWidget {
+  final String name;
+  const RegularHomePage({super.key, required this.name});
 
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Hoş Geldin $name')),
+      body: const Center(child: Text('Regular Home Page')),
+    );
+  }
+}
+
+class SecondPage extends StatelessWidget {
+  const SecondPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('İkinci Sayfa')),
+      body: const Center(child: Text('Second Page')),
+    );
+  }
+}
 
 /*her seferinde bu sayfalar gözüküyor
 import 'package:flutter/material.dart';
